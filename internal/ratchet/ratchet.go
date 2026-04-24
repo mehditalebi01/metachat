@@ -1,6 +1,6 @@
 package ratchet
 
-import "securechat/internal/crypto"
+import "metachat/internal/crypto"
 
 type Ratchet struct {
 	RootKey   []byte

@@ -11,8 +11,8 @@ import (
 	"os"
 	"strings"
 
-	"securechat/internal/crypto"
-	"securechat/internal/ratchet"
+	"metachat/internal/crypto"
+	"metachat/internal/ratchet"
 )
 
 type PrekeyBundle struct {
@@ -29,74 +29,74 @@ type SecureMessage struct {
 func main() {
 	message, err := readMessage()
 	if err != nil {
-		fmt.Println("[ALICE] Error reading message:", err)
+		fmt.Println("[MATTEO] Error reading message:", err)
 		os.Exit(1)
 	}
 
-	// Fetch Bob prekey
-	fmt.Println("[ALICE] Fetching Bob prekey from server...")
-	resp, err := http.Get("http://localhost:8080/prekey?user=bob")
+	// Fetch Benny prekey
+	fmt.Println("[MATTEO] Fetching Benny prekey from server...")
+	resp, err := http.Get("http://localhost:8080/prekey?user=benny")
 	if err != nil {
-		fmt.Println("[ALICE] Error fetching prekey:", err)
+		fmt.Println("[MATTEO] Error fetching prekey:", err)
 		os.Exit(1)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		fmt.Println("[ALICE] Server did not return Bob prekey. Status:", resp.Status)
-		fmt.Println("[ALICE] Run `go run ./bob` first to upload Bob's key.")
+		fmt.Println("[MATTEO] Server did not return Benny prekey. Status:", resp.Status)
+		fmt.Println("[MATTEO] Run `go run ./benny` first to upload Benny's key.")
 		os.Exit(1)
 	}
 	var bundle PrekeyBundle
 	if err := json.NewDecoder(resp.Body).Decode(&bundle); err != nil {
-		fmt.Println("[ALICE] Error decoding prekey bundle:", err)
+		fmt.Println("[MATTEO] Error decoding prekey bundle:", err)
 		os.Exit(1)
 	}
 	if len(bundle.IdentityKey) != 32 {
-		fmt.Println("[ALICE] Invalid Bob identity key length:", len(bundle.IdentityKey))
+		fmt.Println("[MATTEO] Invalid Benny identity key length:", len(bundle.IdentityKey))
 		os.Exit(1)
 	}
-	fmt.Println("[ALICE] Bob prekey received.")
+	fmt.Println("[MATTEO] Benny prekey received.")
 
-	// Alice ephemeral key
-	fmt.Println("[ALICE] Generating Alice ephemeral X25519 keypair...")
-	alicePriv, alicePub := crypto.GenerateKeyPair()
+	// Matteo ephemeral key
+	fmt.Println("[MATTEO] Generating Matteo ephemeral X25519 keypair...")
+	matteoPriv, matteoPub := crypto.GenerateKeyPair()
 
-	fmt.Println("[ALICE] Computing shared secret (X25519 DH)...")
-	shared := crypto.DH(alicePriv, bundle.IdentityKey)
-	fmt.Println("[ALICE] Initializing ratchet and deriving message key...")
+	fmt.Println("[MATTEO] Computing shared secret (X25519 DH)...")
+	shared := crypto.DH(matteoPriv, bundle.IdentityKey)
+	fmt.Println("[MATTEO] Initializing ratchet and deriving message key...")
 	r := ratchet.NewRatchet(shared, bundle.IdentityKey)
 	msgKey := r.NextMessageKey()
 
-	fmt.Println("[ALICE] Encrypting message with AES-GCM...")
+	fmt.Println("[MATTEO] Encrypting message with AES-GCM...")
 	nonce, ciphertext := crypto.Encrypt(msgKey, []byte(message))
 
 	msg := SecureMessage{
-		FromIdentity: alicePub,
-		EphemeralKey: alicePub,
+		FromIdentity: matteoPub,
+		EphemeralKey: matteoPub,
 		Nonce:        nonce,
 		Ciphertext:   ciphertext,
 	}
 
-	fmt.Println("[ALICE] Sending encrypted message to server (queued for bob in Redis)...")
+	fmt.Println("[MATTEO] Sending encrypted message to server (queued for benny in Redis)...")
 	data, err := json.Marshal(msg)
 	if err != nil {
-		fmt.Println("[ALICE] Error encoding secure message:", err)
+		fmt.Println("[MATTEO] Error encoding secure message:", err)
 		os.Exit(1)
 	}
-	sendResp, err := http.Post("http://localhost:8080/send_secure?to=bob",
+	sendResp, err := http.Post("http://localhost:8080/send_secure?to=benny",
 		"application/json", bytes.NewBuffer(data))
 	if err != nil {
-		fmt.Println("[ALICE] Error sending secure message:", err)
+		fmt.Println("[MATTEO] Error sending secure message:", err)
 		os.Exit(1)
 	}
 	defer sendResp.Body.Close()
 	if sendResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(sendResp.Body)
-		fmt.Println("[ALICE] Server rejected message. Status:", sendResp.Status, "Body:", string(body))
+		fmt.Println("[MATTEO] Server rejected message. Status:", sendResp.Status, "Body:", string(body))
 		os.Exit(1)
 	}
 
-	fmt.Println("[ALICE] Done. Message sent.")
+	fmt.Println("[MATTEO] Done. Message sent.")
 }
 
 func readMessage() (string, error) {
@@ -105,11 +105,11 @@ func readMessage() (string, error) {
 		if msg == "" {
 			return "", errors.New("message is empty")
 		}
-		fmt.Println("[ALICE] Message from CLI args:", msg)
+		fmt.Println("[MATTEO] Message from CLI args:", msg)
 		return msg, nil
 	}
 
-	fmt.Print("[ALICE] Type a message to Bob and press Enter: ")
+	fmt.Print("[MATTEO] Type a message to Benny and press Enter: ")
 	reader := bufio.NewReader(os.Stdin)
 	line, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {

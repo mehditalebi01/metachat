@@ -1,4 +1,4 @@
-module securechat
+module metachat
 
 go 1.24.0
 

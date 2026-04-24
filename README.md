@@ -5,7 +5,7 @@
   <img src="https://img.shields.io/badge/Key%20Exchange-X25519-orange?style=for-the-badge" alt="X25519" />
 </p>
 
-# 🔐 SecureChat
+# 🔐 MetaChat
 
 **End-to-end encrypted messaging demo built in Go**, featuring X25519 Diffie-Hellman key exchange, Double Ratchet–inspired key derivation, and AES-256-GCM authenticated encryption — all relayed through a zero-knowledge HTTP server backed by Redis.
 
@@ -31,7 +31,7 @@
 
 ## Overview
 
-SecureChat is a minimal, educational implementation of end-to-end encrypted messaging between two parties (**Alice** and **Bob**) using modern cryptographic primitives. The project demonstrates how protocols like the Signal Protocol work at a fundamental level, without any third-party crypto frameworks — just the Go standard library and `golang.org/x/crypto`.
+MetaChat is a minimal, educational implementation of end-to-end encrypted messaging between two parties (**Matteo** and **Benny**) using modern cryptographic primitives. The project demonstrates how protocols like the Signal Protocol work at a fundamental level, without any third-party crypto frameworks — just the Go standard library and `golang.org/x/crypto`.
 
 ### Key Features
 
@@ -51,12 +51,12 @@ SecureChat is a minimal, educational implementation of end-to-end encrypted mess
 ```
 ┌──────────┐          ┌──────────────────┐          ┌──────────┐
 │          │  HTTPS   │                  │  HTTPS   │          │
-│  Alice   │ -------> │   Relay Server   │ <------- │   Bob    │
+│  Matteo  │ -------> │   Relay Server   │ <------- │  Benny   │
 │ (sender) │          │  (HTTP + Redis)  │          │(receiver)│
 │          │          │                  │          │          │
 └──────────┘          └──────────────────┘          └──────────┘
      │                        │                          │
-     │  1. Fetch Bob's        │  Stores prekeys &        │  1. Upload public key
+     │  1. Fetch Benny's      │  Stores prekeys &        │  1. Upload public key
      │     public key         │  encrypted messages      │     (prekey bundle)
      │                        │  in Redis                │
      │  2. DH key exchange    │                          │  2. Poll mailbox
@@ -77,16 +77,16 @@ SecureChat is a minimal, educational implementation of end-to-end encrypted mess
 ## Cryptographic Design
 
 ```
-Alice                                         Bob
+Matteo                                        Benny
   │                                             │
-  │          ┌─ Bob's X25519 public key ──┐     │
-  │          │  (fetched from server)     │     │
-  │          └────────────────────────────┘     │
+  │          ┌─ Benny's X25519 public key ──┐   │
+  │          │  (fetched from server)       │   │
+  │          └──────────────────────────────┘   │
   │                                             │
   ├─ Generate ephemeral X25519 keypair          ├─ Generate identity X25519 keypair
   │                                             │
-  ├─ shared_secret = X25519(alice_priv,         ├─ shared_secret = X25519(bob_priv,
-  │                         bob_pub)            │                        alice_ephemeral)
+  ├─ shared_secret = X25519(matteo_priv,        ├─ shared_secret = X25519(benny_priv,
+  │                         benny_pub)          │                        matteo_ephemeral)
   │                                             │
   ├─ root_key  = HKDF(shared_secret, "root")   ├─ root_key  = HKDF(shared_secret, "root")
   ├─ chain_key = HKDF(root_key, "chain")        ├─ chain_key = HKDF(root_key, "chain")
@@ -104,13 +104,13 @@ Alice                                         Bob
 ## Project Structure
 
 ```
-securechat/
+metachat/
 ├── go.mod                     # Module definition & dependencies
 ├── server/
 │   └── main.go                # HTTP relay server (Redis-backed)
-├── alice/
+├── matteo/
 │   └── main.go                # Sender client — encrypts & sends messages
-├── bob/
+├── benny/
 │   └── main.go                # Receiver client — polls, decrypts & displays
 └── internal/
     ├── crypto/
@@ -122,8 +122,8 @@ securechat/
 | Package | Responsibility |
 |---|---|
 | `server/` | HTTP endpoints for prekey upload/fetch and encrypted message relay. All data stored in Redis. |
-| `alice/` | Fetches Bob's public key, performs DH, derives keys via ratchet, encrypts with AES-GCM, sends ciphertext. |
-| `bob/` | Generates identity keypair, uploads public key, polls for messages, derives keys, decrypts. |
+| `matteo/` | Fetches Benny's public key, performs DH, derives keys via ratchet, encrypts with AES-GCM, sends ciphertext. |
+| `benny/` | Generates identity keypair, uploads public key, polls for messages, derives keys, decrypts. |
 | `internal/crypto` | Low-level crypto: X25519 key generation & DH, HKDF-SHA256 extraction, AES-256-GCM seal/open. |
 | `internal/ratchet` | Manages root key, chain key, and message key derivation with ratchet stepping for forward secrecy. |
 
@@ -178,8 +178,8 @@ sudo systemctl start redis
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/your-username/securechat.git
-cd securechat
+git clone https://github.com/your-username/metachat.git
+cd metachat
 ```
 
 ### 2. Install Go dependencies
@@ -210,44 +210,44 @@ go run ./server
 [SERVER] Running on :8080 (Redis: localhost:6379)
 ```
 
-### Terminal 2 — Start Bob (receiver)
+### Terminal 2 — Start Benny (receiver)
 
 ```bash
-go run ./bob
+go run ./benny
 ```
 ```
-[BOB] Generating Bob X25519 identity keypair...
-[BOB] Uploading Bob public key to server (stored in Redis as prekey:bob)...
-[BOB] Bob ready. Polling mailbox from server (secure_mailbox:bob in Redis)...
+[BENNY] Generating Benny X25519 identity keypair...
+[BENNY] Uploading Benny public key to server (stored in Redis as prekey:benny)...
+[BENNY] Benny ready. Polling mailbox from server (secure_mailbox:benny in Redis)...
 ```
 
-### Terminal 3 — Send a message as Alice
+### Terminal 3 — Send a message as Matteo
 
 ```bash
 # Interactive mode
-go run ./alice
+go run ./matteo
 
 # Or pass the message directly
-go run ./alice Hello Bob, this is a secret message!
+go run ./matteo Hello Benny, this is a secret message!
 ```
 ```
-[ALICE] Fetching Bob prekey from server...
-[ALICE] Bob prekey received.
-[ALICE] Generating Alice ephemeral X25519 keypair...
-[ALICE] Computing shared secret (X25519 DH)...
-[ALICE] Initializing ratchet and deriving message key...
-[ALICE] Encrypting message with AES-GCM...
-[ALICE] Sending encrypted message to server (queued for bob in Redis)...
-[ALICE] Done. Message sent.
+[MATTEO] Fetching Benny prekey from server...
+[MATTEO] Benny prekey received.
+[MATTEO] Generating Matteo ephemeral X25519 keypair...
+[MATTEO] Computing shared secret (X25519 DH)...
+[MATTEO] Initializing ratchet and deriving message key...
+[MATTEO] Encrypting message with AES-GCM...
+[MATTEO] Sending encrypted message to server (queued for benny in Redis)...
+[MATTEO] Done. Message sent.
 ```
 
-### Bob receives the message
+### Benny receives the message
 
 ```
-[BOB] Received encrypted message. Deriving shared secret (X25519 DH)...
-[BOB] Initializing ratchet and deriving message key...
-[BOB] Decrypting with AES-GCM...
-[BOB] Bob received: Hello Bob, this is a secret message!
+[BENNY] Received encrypted message. Deriving shared secret (X25519 DH)...
+[BENNY] Initializing ratchet and deriving message key...
+[BENNY] Decrypting with AES-GCM...
+[BENNY] Benny received: Hello Benny, this is a secret message!
 ```
 
 ---
@@ -256,11 +256,11 @@ go run ./alice Hello Bob, this is a secret message!
 
 ### Step-by-step flow
 
-1. **Bob** generates an X25519 identity keypair and uploads his public key to the server as a *prekey bundle*.
+1. **Benny** generates an X25519 identity keypair and uploads his public key to the server as a *prekey bundle*.
 
-2. **Alice** fetches Bob's prekey bundle from the server and generates an *ephemeral* X25519 keypair.
+2. **Matteo** fetches Benny's prekey bundle from the server and generates an *ephemeral* X25519 keypair.
 
-3. **Alice** computes a shared secret via X25519 Diffie-Hellman: `shared = X25519(alice_priv, bob_pub)`.
+3. **Matteo** computes a shared secret via X25519 Diffie-Hellman: `shared = X25519(matteo_priv, benny_pub)`.
 
 4. The shared secret is fed into a **ratchet**:
    - `root_key = HKDF-SHA256(shared_secret, "root")`
@@ -268,13 +268,13 @@ go run ./alice Hello Bob, this is a secret message!
    - `chain_key = HKDF-SHA256(chain_key, "chain-step")` *(advance the chain)*
    - `msg_key = HKDF-SHA256(chain_key, "msg")`
 
-5. **Alice** encrypts her plaintext with **AES-256-GCM** using the derived `msg_key`, producing a `nonce` and `ciphertext`.
+5. **Matteo** encrypts his plaintext with **AES-256-GCM** using the derived `msg_key`, producing a `nonce` and `ciphertext`.
 
-6. Alice sends `{ephemeral_pub, nonce, ciphertext}` to the server, which queues it in Bob's Redis mailbox.
+6. Matteo sends `{ephemeral_pub, nonce, ciphertext}` to the server, which queues it in Benny's Redis mailbox.
 
-7. **Bob** polls his mailbox, retrieves the message, and performs the **same key derivation** using `X25519(bob_priv, alice_ephemeral_pub)` to derive the identical `msg_key`.
+7. **Benny** polls his mailbox, retrieves the message, and performs the **same key derivation** using `X25519(benny_priv, matteo_ephemeral_pub)` to derive the identical `msg_key`.
 
-8. **Bob** decrypts the ciphertext with AES-256-GCM and reads the plaintext.
+8. **Benny** decrypts the ciphertext with AES-256-GCM and reads the plaintext.
 
 ---
 
@@ -311,7 +311,7 @@ The relay server exposes four HTTP endpoints:
 | Replay protection | ❌ | No message counters or sequence validation |
 | Transport security | ❌ | HTTP (not TLS) between clients and server |
 | Key persistence | ❌ | Keys are ephemeral — regenerated each run |
-| Multi-message sessions | ❌ | Bob exits after receiving one message |
+| Multi-message sessions | ❌ | Benny exits after receiving one message |
 
 ### For production use, you would additionally need:
 - TLS for all client ↔ server communication
