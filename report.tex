@@ -1,53 +1,97 @@
 \documentclass[12pt,a4paper]{article}
+
+% --- Encoding & Fonts ---
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage{lmodern}
+\usepackage{mathpazo}              % Palatino for body text
+\usepackage{inconsolata}           % Better monospace font for code
 \usepackage[margin=2.5cm]{geometry}
+
+% --- Graphics & Diagrams ---
 \usepackage{graphicx}
-\usepackage{hyperref}
-\usepackage{listings}
-\usepackage{xcolor}
-\usepackage{amsmath}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,calc}
-\usepackage{fancyhdr}
-\usepackage{titlesec}
+
+% --- Tables & Lists ---
 \usepackage{booktabs}
 \usepackage{enumitem}
 \usepackage{caption}
 \usepackage{float}
+\setlist{itemsep=2pt, topsep=4pt}  % Tighter list spacing
 
-\definecolor{codegreen}{rgb}{0.2,0.6,0.2}
-\definecolor{codegray}{rgb}{0.5,0.5,0.5}
-\definecolor{codepurple}{rgb}{0.58,0,0.82}
-\definecolor{backcolour}{rgb}{0.95,0.95,0.96}
+% --- Code Listings ---
+\usepackage{listings}
+\usepackage{xcolor}
+
+\definecolor{codegreen}{rgb}{0.2,0.55,0.2}
+\definecolor{codegray}{rgb}{0.45,0.45,0.45}
+\definecolor{codepurple}{rgb}{0.5,0.0,0.7}
+\definecolor{backcolour}{rgb}{0.97,0.97,0.98}
+\definecolor{framerule}{rgb}{0.78,0.78,0.82}
 \definecolor{linkblue}{rgb}{0.1,0.3,0.65}
+\definecolor{sectionblue}{rgb}{0.12,0.25,0.50}
 
 \lstdefinestyle{gostyle}{
     backgroundcolor=\color{backcolour},
-    commentstyle=\color{codegreen},
-    keywordstyle=\color{blue}\bfseries,
-    numberstyle=\tiny\color{codegray},
+    commentstyle=\itshape\color{codegreen},
+    keywordstyle=\bfseries\color{blue!80!black},
+    numberstyle=\scriptsize\color{codegray},
     stringstyle=\color{codepurple},
-    basicstyle=\ttfamily\footnotesize,
+    basicstyle=\ttfamily\small,
     breaklines=true,
     numbers=left,
-    numbersep=5pt,
+    numbersep=8pt,
     frame=single,
-    rulecolor=\color{codegray},
+    framesep=6pt,
+    xleftmargin=14pt,
+    rulecolor=\color{framerule},
     tabsize=4,
     captionpos=b,
-    showstringspaces=false
+    showstringspaces=false,
+    aboveskip=10pt,
+    belowskip=8pt,
+    abovecaptionskip=6pt
 }
 \lstset{style=gostyle}
 
-\hypersetup{colorlinks=true,linkcolor=linkblue,urlcolor=linkblue,citecolor=linkblue}
+% --- Hyperlinks ---
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=linkblue,
+    urlcolor=linkblue,
+    citecolor=linkblue,
+    pdftitle={MetaChat: E2E Encrypted Messaging},
+    pdfauthor={Mehdi Talebikhatir, Benyamin Baharizadeh}
+}
 
+% --- Section Styling ---
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries\color{sectionblue}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{sectionblue!80}}{\thesubsection}{0.8em}{}
+\titlespacing*{\section}{0pt}{18pt}{10pt}
+\titlespacing*{\subsection}{0pt}{14pt}{6pt}
+
+% --- Math ---
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% --- Header / Footer ---
+\usepackage{fancyhdr}
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\small MetaChat -- Secure Messaging}
-\fancyhead[R]{\small University of Bologna}
+\fancyhead[L]{\small\itshape MetaChat -- Secure Messaging}
+\fancyhead[R]{\small\itshape University of Messina}
 \fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+% --- Caption Styling ---
+\captionsetup{font=small, labelfont=bf, skip=6pt}
+
+% --- Paragraph Spacing ---
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
 
 \begin{document}
 
@@ -55,8 +99,8 @@
 \begin{titlepage}
 \centering
 \vspace*{1cm}
-{\Large\textsc{University of Bologna}}\\[0.3cm]
-{\large Department of Computer Science and Engineering}\\[2cm]
+{\Large\textsc{University of Messina}}\\[0.3cm]
+{\large Department of Engineering}\\[2cm]
 \rule{\linewidth}{0.5mm}\\[0.5cm]
 {\LARGE\bfseries MetaChat: End-to-End Encrypted Messaging\\[0.3cm]
 Using Extended Triple Diffie-Hellman \&\\Double Ratchet in Go}\\[0.5cm]
@@ -171,6 +215,61 @@ The system consists of three independent processes that communicate over HTTP:
     \item \textbf{Server:} An HTTP server backed by Redis. It stores public keys and queues encrypted messages. It never performs any decryption.
 \end{itemize}
 
+\subsection{Message Sequence}
+
+The complete message exchange follows these steps in order:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{c l l l}
+\toprule
+\textbf{Step} & \textbf{From $\rightarrow$ To} & \textbf{Action} & \textbf{Data} \\
+\midrule
+1 & Benny (local) & Generate X25519 identity keypair & -- \\
+2 & Benny $\rightarrow$ Server & Upload public key & \texttt{identity\_key} (32\,B) \\
+3 & Matteo $\rightarrow$ Server & Fetch Benny's public key & -- \\
+4 & Server $\rightarrow$ Matteo & Return prekey bundle & \texttt{identity\_key} (32\,B) \\
+5 & Matteo (local) & DH $\rightarrow$ Ratchet $\rightarrow$ AES-GCM encrypt & -- \\
+6 & Matteo $\rightarrow$ Server & Send encrypted payload & \texttt{nonce} + \texttt{ciphertext} \\
+7 & Benny $\rightarrow$ Server & Poll mailbox & -- \\
+8 & Server $\rightarrow$ Benny & Return encrypted message & \texttt{nonce} + \texttt{ciphertext} \\
+9 & Benny (local) & DH $\rightarrow$ Ratchet $\rightarrow$ AES-GCM decrypt & plaintext \\
+\bottomrule
+\end{tabular}
+\caption{Step-by-step message exchange sequence.}
+\label{tab:seq}
+\end{table}
+
+\vspace{-4pt}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    box/.style={rectangle, draw, thick, rounded corners=3pt, minimum width=1.8cm, minimum height=0.65cm, font=\small\bfseries},
+    arr/.style={-{Stealth[length=2mm]}, thick},
+    lbl/.style={font=\scriptsize, fill=white, inner sep=1.5pt}
+]
+    \node[box, fill=green!10] (B) at (0,0) {Benny};
+    \node[box, fill=gray!12]  (S) at (4.5,0) {Server};
+    \node[box, fill=blue!10]  (M) at (9,0) {Matteo};
+
+    \draw[thick, gray!25, dashed] (0,-0.5)--(0,-7);
+    \draw[thick, gray!25, dashed] (4.5,-0.5)--(4.5,-7);
+    \draw[thick, gray!25, dashed] (9,-0.5)--(9,-7);
+
+    \draw[arr] (0,-1.0)   -- node[lbl,above]{2. prekey}          (4.5,-1.0);
+    \draw[arr] (9,-2.0)   -- node[lbl,above]{3. get prekey}      (4.5,-2.0);
+    \draw[arr,dashed,gray] (4.5,-2.5) -- node[lbl,above]{4. pub key} (9,-2.5);
+    \draw[arr] (9,-3.8)   -- node[lbl,above]{6. ciphertext}      (4.5,-3.8);
+    \draw[arr] (0,-5.0)   -- node[lbl,above]{7. poll}            (4.5,-5.0);
+    \draw[arr,dashed,gray] (4.5,-5.5) -- node[lbl,above]{8. ciphertext} (0,-5.5);
+    \node[rectangle, draw, dashed, rounded corners, fill=green!5, font=\scriptsize\itshape, inner sep=3pt] at (0,-6.5) {plaintext};
+\end{tikzpicture}
+\caption{Simplified sequence diagram of the message exchange.}
+\label{fig:seq}
+\end{figure}
+
 \subsection{Project Structure}
 
 \begin{table}[H]
@@ -210,6 +309,56 @@ GET  & \texttt{/fetch\_secure?user=X} & Pop next message from mailbox \\
 \end{table}
 
 Data is stored in Redis under two key patterns: \texttt{prekey:<user>} (string, JSON public key bundle) and \texttt{secure\_mailbox:<user>} (list, queue of encrypted messages).
+
+\subsection{Dependencies}
+
+The project uses minimal external dependencies, relying mostly on the Go standard library:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{l l p{6.5cm}}
+\toprule
+\textbf{Module} & \textbf{Version} & \textbf{Purpose} \\
+\midrule
+\texttt{golang.org/x/crypto} & v0.48.0 & X25519 (\texttt{curve25519}), HKDF-SHA256 (\texttt{hkdf}) \\
+\texttt{github.com/redis/go-redis/v9} & v9.18.0 & Redis client for key storage and message queuing \\
+\texttt{crypto/aes}, \texttt{crypto/cipher} & stdlib & AES-256-GCM authenticated encryption \\
+\texttt{crypto/rand} & stdlib & Cryptographically secure random bytes \\
+\texttt{net/http} & stdlib & HTTP server and client \\
+\bottomrule
+\end{tabular}
+\caption{Project dependencies and their roles.}
+\end{table}
+
+\subsection{Message Payload Structure}
+
+The encrypted message sent over the wire is a JSON object with four fields. Below is an example of what the server sees (all binary fields are Base64-encoded by Go's JSON marshaler):
+
+\begin{lstlisting}[language={}, caption={Example SecureMessage JSON payload (server's view).}, numbers=none]
+{
+  "from_identity": "a3RmZ2hqa2xhc2RmZ2hqa2xh...",
+  "ephemeral_key": "a3RmZ2hqa2xhc2RmZ2hqa2xh...",
+  "nonce":         "dGhpcyBpcyBhIG5vbmNl",
+  "ciphertext":    "Y2lwaGVydGV4dCBibG9iIGhlcmU..."
+}
+\end{lstlisting}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{l l p{5.8cm}}
+\toprule
+\textbf{Field} & \textbf{Size} & \textbf{Description} \\
+\midrule
+\texttt{from\_identity} & 32 bytes & Sender's public key (for identification) \\
+\texttt{ephemeral\_key} & 32 bytes & Sender's ephemeral X25519 public key (used by receiver for DH) \\
+\texttt{nonce} & 12 bytes & Random AES-GCM nonce \\
+\texttt{ciphertext} & variable & AES-GCM sealed message (ciphertext + 16-byte auth tag) \\
+\bottomrule
+\end{tabular}
+\caption{Fields of the SecureMessage payload.}
+\end{table}
+
+The server stores and forwards this JSON blob without interpreting any of the fields. It has no access to the shared secret or message key needed to decrypt \texttt{ciphertext}.
 
 % ============================================================
 \section{Implementation Details}
@@ -546,6 +695,39 @@ Messenger  & Yes & Signal Protocol & Default since Dec 2023 \\
 \end{table}
 
 The Signal Protocol, which MetaChat is inspired by, combines X3DH for initial key exchange and Double Ratchet for ongoing encryption, providing both forward secrecy and future secrecy. Our project implements a simplified version of this pipeline, demonstrating the core ideas in a readable way.
+
+% ============================================================
+\section{Testing and Verification}
+\label{sec:testing}
+% ============================================================
+
+We verified the correctness of the system through the following methods:
+
+\subsection{Functional Testing}
+
+The primary test was running the full message exchange pipeline end-to-end:
+\begin{enumerate}
+    \item Start Redis and verify connectivity (\texttt{redis-cli ping} returns \texttt{PONG}).
+    \item Start the server and confirm it binds to port 8080.
+    \item Start Benny and verify that the server logs the prekey storage (\texttt{prekey:benny} key appears in Redis).
+    \item Send a message as Matteo with a known plaintext string.
+    \item Verify that Benny's terminal output shows the exact same plaintext, confirming that key exchange, ratchet derivation, encryption, and decryption all produce consistent results.
+\end{enumerate}
+
+We repeated this test with different message lengths (short strings, paragraphs, special characters including Unicode) to confirm that AES-GCM handles variable-length input correctly.
+
+\subsection{Negative Testing}
+
+We also tested failure scenarios:
+\begin{itemize}
+    \item \textbf{Wrong key:} Manually modifying the ephemeral key in a queued Redis message causes Benny to derive a different shared secret, and \texttt{gcm.Open()} returns \texttt{nil} (authentication failure). This confirms that AES-GCM rejects tampered ciphertext.
+    \item \textbf{Server down:} If the server is not running, both Matteo and Benny print clear error messages and exit gracefully.
+    \item \textbf{No prekey:} If Matteo runs before Benny uploads his key, the server returns HTTP 404 and Matteo exits with an instruction to start Benny first.
+\end{itemize}
+
+\subsection{Key Verification}
+
+We added temporary debug prints during development to confirm that the shared secret computed by Matteo (\texttt{DH(matteo\_priv, benny\_pub)}) and Benny (\texttt{DH(benny\_priv, matteo\_ephemeral)}) were byte-identical. Both produced the same 32-byte value, confirming the correctness of the X25519 key exchange.
 
 % ============================================================
 \section{Conclusion}
