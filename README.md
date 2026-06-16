@@ -22,6 +22,7 @@
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
 - [Usage](#usage)
+- [Interface and Storage](#interface-and-storage)
 - [How It Works](#how-it-works)
 - [API Reference](#api-reference)
 - [Security Considerations](#security-considerations)
@@ -31,7 +32,7 @@
 
 ## Overview
 
-MetaChat is a minimal, educational implementation of end-to-end encrypted messaging between two parties (**Matteo** and **Benny**) using modern cryptographic primitives. The project demonstrates how protocols like the Signal Protocol work at a fundamental level, without any third-party crypto frameworks — just the Go standard library and `golang.org/x/crypto`.
+MetaChat is a minimal, educational implementation of end-to-end encrypted messaging between many named clients, such as `john`, `smite`, `matteo`, `benny`, or any other username you create. The project demonstrates how protocols like the Signal Protocol work at a fundamental level, without any third-party crypto frameworks — just the Go standard library and `golang.org/x/crypto`.
 
 ### Key Features
 
@@ -43,6 +44,7 @@ MetaChat is a minimal, educational implementation of end-to-end encrypted messag
 | **Key Ratcheting** | Forward secrecy via Double Ratchet–inspired chain key advancement |
 | **Zero-Knowledge Relay** | Server cannot decrypt messages — it only forwards ciphertext |
 | **Redis Mailbox** | Asynchronous message delivery via Redis lists |
+| **Multi-Client CLI** | Run one reusable client as any username and connect to 10-20+ peers |
 
 ---
 
@@ -50,14 +52,14 @@ MetaChat is a minimal, educational implementation of end-to-end encrypted messag
 
 ```
 ┌──────────┐          ┌──────────────────┐          ┌──────────┐
-│          │  HTTPS   │                  │  HTTPS   │          │
-│  Matteo  │ -------> │   Relay Server   │ <------- │  Benny   │
-│ (sender) │          │  (HTTP + Redis)  │          │(receiver)│
+│          │   HTTP   │                  │   HTTP   │          │
+│  john    │ -------> │   Relay Server   │ <------- │  smite   │
+│ client   │          │  (HTTP + Redis)  │          │ client   │
 │          │          │                  │          │          │
 └──────────┘          └──────────────────┘          └──────────┘
      │                        │                          │
-     │  1. Fetch Benny's      │  Stores prekeys &        │  1. Upload public key
-     │     public key         │  encrypted messages      │     (prekey bundle)
+     │  1. Fetch peer's       │  Stores users, contacts, │  1. Upload public key
+     │     public key         │  prekeys, and ciphertext │     (prekey bundle)
      │                        │  in Redis                │
      │  2. DH key exchange    │                          │  2. Poll mailbox
      │     (X25519)           │                          │     for messages
@@ -77,16 +79,16 @@ MetaChat is a minimal, educational implementation of end-to-end encrypted messag
 ## Cryptographic Design
 
 ```
-Matteo                                        Benny
+Sender                                        Receiver
   │                                             │
-  │          ┌─ Benny's X25519 public key ──┐   │
+  │          ┌─ receiver X25519 public key ─┐   │
   │          │  (fetched from server)       │   │
   │          └──────────────────────────────┘   │
   │                                             │
   ├─ Generate ephemeral X25519 keypair          ├─ Generate identity X25519 keypair
   │                                             │
-  ├─ shared_secret = X25519(matteo_priv,        ├─ shared_secret = X25519(benny_priv,
-  │                         benny_pub)          │                        matteo_ephemeral)
+  ├─ shared_secret = X25519(ephemeral_priv,     ├─ shared_secret = X25519(receiver_priv,
+  │                         receiver_pub)       │                        sender_ephemeral)
   │                                             │
   ├─ root_key  = HKDF(shared_secret, "root")   ├─ root_key  = HKDF(shared_secret, "root")
   ├─ chain_key = HKDF(root_key, "chain")        ├─ chain_key = HKDF(root_key, "chain")
@@ -108,6 +110,8 @@ metachat/
 ├── go.mod                     # Module definition & dependencies
 ├── server/
 │   └── main.go                # HTTP relay server (Redis-backed)
+├── client/
+│   └── main.go                # Generic multi-user client
 ├── matteo/
 │   └── main.go                # Sender client — encrypts & sends messages
 ├── benny/
@@ -121,9 +125,10 @@ metachat/
 
 | Package | Responsibility |
 |---|---|
-| `server/` | HTTP endpoints for prekey upload/fetch and encrypted message relay. All data stored in Redis. |
-| `matteo/` | Fetches Benny's public key, performs DH, derives keys via ratchet, encrypts with AES-GCM, sends ciphertext. |
-| `benny/` | Generates identity keypair, uploads public key, polls for messages, derives keys, decrypts. |
+| `server/` | HTTP endpoints for users, contacts, prekey upload/fetch, and encrypted message relay. All data stored in Redis. |
+| `client/` | Reusable interactive CLI for any username; supports user discovery, connections, sending, and mailbox polling. |
+| `matteo/` | Legacy sender demo that fetches Benny's public key and sends one encrypted message. |
+| `benny/` | Legacy receiver demo that uploads Benny's key and decrypts one message. |
 | `internal/crypto` | Low-level crypto: X25519 key generation & DH, HKDF-SHA256 extraction, AES-256-GCM seal/open. |
 | `internal/ratchet` | Manages root key, chain key, and message key derivation with ratchet stepping for forward secrecy. |
 
@@ -199,7 +204,7 @@ redis-cli ping
 
 ## Usage
 
-Open **three separate terminals** and run the components in order:
+Open one terminal for the server and one terminal per client.
 
 ### Terminal 1 — Start the relay server
 
@@ -207,48 +212,104 @@ Open **three separate terminals** and run the components in order:
 go run ./server
 ```
 ```
-[SERVER] Running on :8080 (Redis: localhost:6379)
+[SERVER] Running on :8080 (Redis: 127.0.0.1:6379)
 ```
 
-### Terminal 2 — Start Benny (receiver)
+Optional configuration:
+
+```bash
+REDIS_ADDR=127.0.0.1:6379 HTTP_ADDR=:8080 go run ./server
+```
+
+### Terminal 2 — Start John
+
+```bash
+go run ./client -user john
+```
+```
+[john] Registered prekey with http://localhost:8080
+[john] Interactive MetaChat ready. Use /help for commands.
+```
+
+### Terminal 3 — Start Smite
+
+```bash
+go run ./client -user smite
+```
+```
+[smite] Registered prekey with http://localhost:8080
+[smite] Interactive MetaChat ready. Use /help for commands.
+```
+
+### Create a connection and chat
+
+In John's terminal:
+
+```text
+/users
+/connect smite
+/to smite
+hello smite, this is encrypted
+```
+
+Smite receives:
+
+```text
+[john -> smite] hello smite, this is encrypted
+```
+
+You can start more clients the same way:
+
+```bash
+go run ./client -user alice
+go run ./client -user bob
+go run ./client -user charlie
+```
+
+The server accepts usernames with letters, numbers, dots, underscores, and hyphens, so running 10-20 local clients is just a matter of opening more terminals or starting them with different `-user` values.
+
+### One-shot sends
+
+You can also send one message without entering the interactive shell:
+
+```bash
+go run ./client -user john -to smite -message "quick encrypted note"
+go run ./client -user john -to smite "same idea using CLI args"
+```
+
+Keep a client listening without the shell:
+
+```bash
+go run ./client -user smite -listen
+```
+
+### Interactive commands
+
+| Command | Description |
+|---|---|
+| `/users` | List registered users with uploaded prekeys |
+| `/contacts` | List this user's saved connections |
+| `/connect <user>` | Save a bidirectional connection |
+| `/to <user>` | Set the active recipient for plain text input |
+| `/send <user> <message>` | Send one encrypted message |
+| `/quit` | Exit the client |
+
+### Legacy two-user demo
+
+The original demo still works:
 
 ```bash
 go run ./benny
-```
-```
-[BENNY] Generating Benny X25519 identity keypair...
-[BENNY] Uploading Benny public key to server (stored in Redis as prekey:benny)...
-[BENNY] Benny ready. Polling mailbox from server (secure_mailbox:benny in Redis)...
+go run ./matteo "Hello Benny, this is a secret message!"
 ```
 
-### Terminal 3 — Send a message as Matteo
+---
 
-```bash
-# Interactive mode
-go run ./matteo
+## Interface and Storage
 
-# Or pass the message directly
-go run ./matteo Hello Benny, this is a secret message!
-```
-```
-[MATTEO] Fetching Benny prekey from server...
-[MATTEO] Benny prekey received.
-[MATTEO] Generating Matteo ephemeral X25519 keypair...
-[MATTEO] Computing shared secret (X25519 DH)...
-[MATTEO] Initializing ratchet and deriving message key...
-[MATTEO] Encrypting message with AES-GCM...
-[MATTEO] Sending encrypted message to server (queued for benny in Redis)...
-[MATTEO] Done. Message sent.
-```
+The terminal client is enough for the next project step because it gives you a real interface for creating users, seeing users, connecting contacts, and sending messages without adding frontend complexity yet.
 
-### Benny receives the message
-
-```
-[BENNY] Received encrypted message. Deriving shared secret (X25519 DH)...
-[BENNY] Initializing ratchet and deriving message key...
-[BENNY] Decrypting with AES-GCM...
-[BENNY] Benny received: Hello Benny, this is a secret message!
-```
+Redis is enough for this demo and for 10-20 local clients because it is doing the right relay jobs: public prekey lookup, contact sets, and encrypted mailbox queues. For a bigger app, keep Redis for fast queues and online/session state, then add a durable database such as SQLite or Postgres for accounts, profiles, long-lived contacts, device records, audit metadata, and message-delivery state.
 
 ---
 
@@ -256,11 +317,11 @@ go run ./matteo Hello Benny, this is a secret message!
 
 ### Step-by-step flow
 
-1. **Benny** generates an X25519 identity keypair and uploads his public key to the server as a *prekey bundle*.
+1. Each client generates an X25519 identity keypair and uploads its public key to the server as a *prekey bundle*.
 
-2. **Matteo** fetches Benny's prekey bundle from the server and generates an *ephemeral* X25519 keypair.
+2. The sender fetches the receiver's prekey bundle from the server and generates an *ephemeral* X25519 keypair.
 
-3. **Matteo** computes a shared secret via X25519 Diffie-Hellman: `shared = X25519(matteo_priv, benny_pub)`.
+3. The sender computes a shared secret via X25519 Diffie-Hellman: `shared = X25519(sender_ephemeral_priv, receiver_pub)`.
 
 4. The shared secret is fed into a **ratchet**:
    - `root_key = HKDF-SHA256(shared_secret, "root")`
@@ -268,32 +329,37 @@ go run ./matteo Hello Benny, this is a secret message!
    - `chain_key = HKDF-SHA256(chain_key, "chain-step")` *(advance the chain)*
    - `msg_key = HKDF-SHA256(chain_key, "msg")`
 
-5. **Matteo** encrypts his plaintext with **AES-256-GCM** using the derived `msg_key`, producing a `nonce` and `ciphertext`.
+5. The sender encrypts the plaintext with **AES-256-GCM** using the derived `msg_key`, producing a `nonce` and `ciphertext`.
 
-6. Matteo sends `{ephemeral_pub, nonce, ciphertext}` to the server, which queues it in Benny's Redis mailbox.
+6. The sender sends `{from_user, from_identity, ephemeral_pub, nonce, ciphertext}` to the server, which queues it in the receiver's Redis mailbox.
 
-7. **Benny** polls his mailbox, retrieves the message, and performs the **same key derivation** using `X25519(benny_priv, matteo_ephemeral_pub)` to derive the identical `msg_key`.
+7. The receiver polls its mailbox, retrieves the message, and performs the **same key derivation** using `X25519(receiver_priv, sender_ephemeral_pub)` to derive the identical `msg_key`.
 
-8. **Benny** decrypts the ciphertext with AES-256-GCM and reads the plaintext.
+8. The receiver decrypts the ciphertext with AES-256-GCM and reads the plaintext.
 
 ---
 
 ## API Reference
 
-The relay server exposes four HTTP endpoints:
+The relay server exposes these HTTP endpoints:
 
 | Method | Endpoint | Query Params | Body | Description |
 |--------|----------|-------------|------|-------------|
 | `POST` | `/upload_prekey` | `user` | `{"identity_key": [bytes]}` | Upload a user's public key bundle |
 | `GET` | `/prekey` | `user` | — | Fetch a user's prekey bundle |
-| `POST` | `/send_secure` | `to` | `{"from_identity", "ephemeral_key", "nonce", "ciphertext"}` | Queue an encrypted message for a recipient |
+| `GET` | `/users` | — | — | List users that have uploaded prekeys |
+| `POST` | `/connect` | `user`, `peer` | — | Save a bidirectional contact connection |
+| `GET` | `/contacts` | `user` | — | List a user's saved contacts |
+| `POST` | `/send_secure` | `to` | `{"from_user", "from_identity", "ephemeral_key", "nonce", "ciphertext"}` | Queue an encrypted message for a recipient |
 | `GET` | `/fetch_secure` | `user` | — | Pop the next encrypted message from a user's mailbox |
 
 ### Redis Keys
 
 | Key Pattern | Type | Description |
 |---|---|---|
+| `users` | Set | Registered usernames with uploaded prekeys |
 | `prekey:<user>` | String | JSON-encoded prekey bundle for `<user>` |
+| `contacts:<user>` | Set | Saved contact names for `<user>` |
 | `secure_mailbox:<user>` | List | Queue of encrypted messages awaiting delivery |
 
 ---
@@ -311,7 +377,7 @@ The relay server exposes four HTTP endpoints:
 | Replay protection | ❌ | No message counters or sequence validation |
 | Transport security | ❌ | HTTP (not TLS) between clients and server |
 | Key persistence | ❌ | Keys are ephemeral — regenerated each run |
-| Multi-message sessions | ❌ | Benny exits after receiving one message |
+| Multi-message sessions | ✅ Demo | Generic clients can keep polling and sending; legacy Benny still exits after one message |
 
 ### For production use, you would additionally need:
 - TLS for all client ↔ server communication

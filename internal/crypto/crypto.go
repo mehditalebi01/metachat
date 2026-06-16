@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/sha256"
+	"fmt"
 	"io"
 
 	"golang.org/x/crypto/hkdf"
@@ -46,8 +47,21 @@ func Encrypt(key, plaintext []byte) (nonce, ciphertext []byte) {
 
 // AES-GCM decrypt
 func Decrypt(key, nonce, ciphertext []byte) []byte {
-	block, _ := aes.NewCipher(key)
-	gcm, _ := cipher.NewGCM(block)
-	plaintext, _ := gcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, _ := DecryptWithError(key, nonce, ciphertext)
 	return plaintext
+}
+
+func DecryptWithError(key, nonce, ciphertext []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+	if len(nonce) != gcm.NonceSize() {
+		return nil, fmt.Errorf("invalid nonce length: got %d, want %d", len(nonce), gcm.NonceSize())
+	}
+	return gcm.Open(nil, nonce, ciphertext, nil)
 }
